@@ -1,0 +1,8 @@
+Changes
+Makefile.PL
+MANIFEST
+ppport.h
+README
+SeqAn.xs
+t/SeqAn.t
+lib/PEPE/SeqAn.pm
