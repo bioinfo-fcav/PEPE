@@ -26,8 +26,8 @@ else
                 echo "Wrong R1 file (${r1file})"
                 exit
         else   
-                if [[ ! ${r1file} =~ _R1.fastq$ ]]; then
-                        if [[ ${r1file} =~ _R1.fastq.gz ]]; then
+                if [[ ! ${r1file} =~ _R1(_[0-9]+)?.fastq$ ]]; then
+                        if [[ ${r1file} =~ _R1(_[0-9]+)?.fastq.gz ]]; then
                                 echo "Uncompressing ${r1file} ..."
                                 gunzip ${r1file}
                                 r1file=`echo ${r1file} | sed 's/.gz$//'`
@@ -47,8 +47,8 @@ else
                 echo "Wrong R2 file (${r2file})"
                 exit
         else   
-                if [[ ! ${r2file} =~ _R2.fastq$ ]]; then
-                        if [[ ${r2file} =~ _R2.fastq.gz ]]; then
+                if [[ ! ${r2file} =~ _R2(_[0-9]+)?.fastq$ ]]; then
+                        if [[ ${r2file} =~ _R2(_[0-9]+)?.fastq.gz ]]; then
                                 echo "Uncompressing ${r2file} ..."
                                 gunzip ${r2file}
                                 r2file=`echo ${r2file} | sed 's/.gz$//'`
@@ -109,10 +109,9 @@ fi
 
 
 declare -A GROUP
-biogroups=()
 counts_file_param=()
 
-for s in $(cut -f 2 barcodes.txt); do
+for s in $(cut -f 2 ${bcfile}); do
 	
 	echo "Processing sample $s ...";
 	
@@ -144,22 +143,21 @@ for s in $(cut -f 2 barcodes.txt); do
 	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.assembled.diamond.txt -x .recovered.assembled.txt
 	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.unassembled.diamond.txt -x .recovered.unassembled.txt
 	
-	./count_Reads.pl -i ${outdir} -s ${s} -x *id*assembled.txt -o ${outdir}/${s}.counts.txt -l INFO
+	eval "./count_Reads.pl -i ${outdir} -s ${s} -x *id*assembled.txt -o ${outdir}/${s}.counts.txt -l INFO"
 
-	counts_file_param=(${counts_file_param[@]} "-d ${s}=${outdir}/${s}.counts.txt")
-	bgroup=$(echo ${s} | sed 's/[0-9]\+$//')
-	biogroups=($( printf "%s\n" ${biogroups[@]} ${bgroup} | sort -u ))
-	GROUP[${bgroup}]="${GROUP[${bgroup}]} ${s}"
+	counts_file_param=(${counts_file_param[@]} "-d ${s}=\"${outdir}/${s}.counts.txt\"")
+	biogroup=$(echo ${s} | sed 's/[0-9]\+$//')
+	GROUP[${biogroup}]="${GROUP[${biogroup}]} ${s}"
 done
 
 groups_param=()
-for K in "${biogroups[@]}"; do
-	groups_param=(${groups_param[@]} "-g ${K}=$(echo ${GROUP[${K}]} | sed 's/ /,/')")
+for K in "${!GROUP[@]}"; do
+	groups_param=(${groups_param[@]} "-g ${K}=\"$(echo ${GROUP[${K}]} | sed 's/ /,/g')\"")
 done
 
-./join_Results.pl ${counts_file_param[*]} ${groups_param[*]} > ${outdir}/ReadCountsMatrix.txt
+eval "./join_Results.pl ${counts_file_param[*]} ${groups_param[*]} > ${outdir}/ReadCountsMatrix.txt"
 
-./filter_Results.pl ${groups_param} -i ${outdir}/ReadCountsMatrix.txt -o ${refsample} -u 2 -s 3 -m 1 > ${outdir}/FilteredReadCountsMatrix_2_3_1.txt
+eval "./filter_Results.pl ${groups_param[*]} -i ${outdir}/ReadCountsMatrix.txt -o ${outsample} -u 2 -s 3 -m 1 > ${outdir}/FilteredReadCountsMatrix_2_3_1.txt"
 
-./annot_Results.pl -i ${outdir}/FilteredReadCountsMatrix_2_3_1.txt -g ${genenamefile} -d ${deflinefile} > ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1.txt
+eval "./annot_Results.pl -i ${outdir}/FilteredReadCountsMatrix_2_3_1.txt -g ${genenamefile} -d ${deflinefile} > ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1.txt"
 

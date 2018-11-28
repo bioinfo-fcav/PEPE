@@ -124,7 +124,7 @@ while(<DEF>) {
 	chomp;
 	my ($gene, undef, $defline) = split(/\t/, $_);
 	$gene=~s/\.\d+$//;
-	$defline=~s/defLine\s+//;
+	$defline=~s/defLine\s+// if ($defline);
 	$definition{ $gene } = $defline;
 }
 close(DEF);
