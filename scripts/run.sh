@@ -13,6 +13,8 @@ dmndfile=$6
 genenamefile=$7
 deflinefile=$8
 
+fastafile=$9
+
 if [ ! ${r1file} ] || [ ! ${r2file} ] || [ ! ${bcfile} ] || [ ! ${outdir} ] || [ ! ${outsample} ] || [ ! ${genenamefile} ] || [ ! ${deflinefile} ]; then
 	echo "Please, put the arguments in this order: <R1 file path> <R2 file path> <barcode-sample file path> <output directory path> <outgroup sample name> <proteome diamond index (.dmnd) file path> <Phytozome gene Name file path> <Phytozome defline file path>"
 	exit;
@@ -126,24 +128,28 @@ for s in $(cut -f 2 ${bcfile}); do
 	diamond blastx --more-sensitive --strand plus --top 10 --query-cover 80 --threads 20 --db ${dmndfile} \
 	--query ./${outdir}/${s}.inframe.unassembled.fastq --out ./${outdir}/${s}.inframe.unassembled.diamond.daa --outfmt 100
 
-	diamond view --daa ${outdir}/${s}.inframe.assembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe \
+	diamond view --daa ${outdir}/${s}.inframe.assembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe sstart send \
 	--out ./${outdir}/${s}.inframe.assembled.diamond.txt
 
-	diamond view --daa ${outdir}/${s}.inframe.unassembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe \
+	diamond view --daa ${outdir}/${s}.inframe.unassembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe sstart send \
 	--out ./${outdir}/${s}.inframe.unassembled.diamond.txt
 
 	diamond blastx --more-sensitive --strand plus --top 10 --query-cover 80 --threads 20 --db ${dmndfile} \
 	--query ./${outdir}/${s}.inframe.recovered.assembled.fastq --out ./${outdir}/${s}.inframe.recovered.assembled.diamond.daa --outfmt 100
-	diamond blastx --more-sensitive --strand plus --top 10 --query-cover 80 --threads 20 --db ${dmndfile} --query ./${outdir}/${s}.inframe.recovered.unassembled.fastq --out ./${outdir}/${s}.inframe.recovered.unassembled.diamond.daa --outfmt 100
-	diamond view --daa ${outdir}/${s}.inframe.recovered.assembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe --out ./${outdir}/${s}.inframe.recovered.assembled.diamond.txt
-	diamond view --daa ${outdir}/${s}.inframe.recovered.unassembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe --out ./${outdir}/${s}.inframe.recovered.unassembled.diamond.txt
 
-	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.assembled.diamond.txt -x .assembled.txt
-	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.unassembled.diamond.txt -x .unassembled.txt
-	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.assembled.diamond.txt -x .recovered.assembled.txt
-	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.unassembled.diamond.txt -x .recovered.unassembled.txt
+	diamond blastx --more-sensitive --strand plus --top 10 --query-cover 80 --threads 20 --db ${dmndfile} \
+	--query ./${outdir}/${s}.inframe.recovered.unassembled.fastq --out ./${outdir}/${s}.inframe.recovered.unassembled.diamond.daa --outfmt 100
+
+	diamond view --daa ${outdir}/${s}.inframe.recovered.assembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe sstart send --out ./${outdir}/${s}.inframe.recovered.assembled.diamond.txt
+
+	diamond view --daa ${outdir}/${s}.inframe.recovered.unassembled.diamond.daa --outfmt 6 qseqid qlen sseqid bitscore qcovhsp qframe sstart send --out ./${outdir}/${s}.inframe.recovered.unassembled.diamond.txt
+
+	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.assembled.diamond.txt -x .assembled.bed
+	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.unassembled.diamond.txt -x .unassembled.bed
+	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.assembled.diamond.txt -x .recovered.assembled.bed
+	./find_Protein.pl -s ${s} -o ${outdir}/ -i ${outdir}/${s}.inframe.recovered.unassembled.diamond.txt -x .recovered.unassembled.bed
 	
-	eval "./count_Reads.pl -i ${outdir} -s ${s} -x *id*assembled.txt -o ${outdir}/${s}.counts.txt -l INFO"
+	eval "./count_Reads.pl -i ${outdir} -s ${s} -x *id*assembled.bed -o ${outdir}/${s}.counts.txt -l INFO"
 
 	counts_file_param=(${counts_file_param[@]} "-d ${s}=\"${outdir}/${s}.counts.txt\"")
 	biogroup=$(echo ${s} | sed 's/[0-9]\+$//')
@@ -161,3 +167,19 @@ eval "./filter_Results.pl ${groups_param[*]} -i ${outdir}/ReadCountsMatrix.txt -
 
 eval "./annot_Results.pl -i ${outdir}/FilteredReadCountsMatrix_2_3_1.txt -g ${genenamefile} -d ${deflinefile} > ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1.txt"
 
+if [ ${fastafile} ]; then
+	if [ ! -e ${bcfile} ]; then
+		echo "Wrong BC file (${bcfile})"
+		exit
+	fi
+
+	samps=`echo ${!GROUP[@]} | sed "s/${outsample}//" | sed 's/^ \+//' | sed 's/ \+$//' | sed 's/ \+/,/g'`
+	
+	mkdir -p ${outdir}/hydroplot/
+	
+	eval "cut -f 1 ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1.txt | grep -v '^ID' | ./findPeaks.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1_peaks.txt -l INFO"
+
+	eval "./plotHydro.pl -p ${fastafile} -i ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1_peaks.txt -o ${outdir}/hydroplot/"
+fi
+
+./mkPEPEstats.pl -i ${outdir} -f ${outdir}/AnnotFilteredReadCountsMatrix_2_3_1_peaks.txt -p ${deflinefile} -o ${outdir}/STATISTICS.txt

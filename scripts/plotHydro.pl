@@ -66,8 +66,14 @@ use Getopt::Long;
 
 use File::Basename;
 
+use Bio::SeqIO;
+
 use vars qw/$LOGGER/;
 use FileHandle;
+
+use File::Temp qw/ tempfile tempdir /;
+
+use FindBin qw/$Bin/;
 
 INIT {
     use Log::Log4perl qw/:easy/;
@@ -75,16 +81,14 @@ INIT {
     $LOGGER = Log::Log4perl->get_logger($0);
 }
 
-my ($level, $indir, $sample, $suffix, $outfile, $countprotein);
+my ($level, $infile, $outdir, $protfile);
 
 Usage("Too few arguments") if $#ARGV < 0;
 GetOptions( "h|?|help" => sub { &Usage(); },
             "l|level=s"=> \$level,
-	    "i|indir=s"=>\$indir,
-	    "s|sample=s"=>\$sample,
-	    "o|outfile=s"=>\$outfile,
-	    "x|suffix=s"=>\$suffix,
-	    "p|protein"=>\$countprotein
+	    "i|infile=s"=>\$infile,
+	    "o|outdir=s"=>\$outdir,
+	    "p|protfile=s"=>\$protfile
     ) or &Usage();
 
 
@@ -102,60 +106,67 @@ if ($level) {
     Log::Log4perl->easy_init($LEVEL{$level});
 }
 
-$LOGGER->logdie("Missing input directory") if (!defined $indir);
-$LOGGER->logdie("Wrong input directory ($indir)") if (! -e $indir);
+$LOGGER->logdie("Missing input protein sequence fasta file") if (!defined $protfile);
+$LOGGER->logdie("Wrong input protein sequence fasta file ($protfile)") if (! -e $protfile);
 
-$LOGGER->logdie("Missing sample name") if (! defined $sample);
+my %data;
+if ($infile) {
+	$LOGGER->logdie("Wrong input file with peaks ($infile)") if (! -e $infile);
+	open(IN, "<", $infile) or $LOGGER->logdie($!);
+	while(<IN>) {
+		chomp;
+		my @F=split(/\t/, $_);
+		push(@{ $data{$F[0]} }, \@F);
+	}
+	close(IN);
+} elsif (! -t STDIN) {
+	while(<STDIN>) {
+		chomp;
+		my @F=split(/\t/, $_);
+		push(@{ $data{$F[0]} }, \@F);
+	}
+}
 
-$LOGGER->logdie("Missing suffix") if (! defined $suffix);
+$LOGGER->logdie("Missing output dir") if (!defined $outdir);
+$LOGGER->logdie("Wrong output dir ($outdir)") if (! -d $outdir);
 
-$LOGGER->logdie("Missing output file") if (!defined $outfile);
+my %protein;
 
+my $seqin = Bio::SeqIO->new(-file=>$protfile, -format=>'FASTA');
+
+while(my $seq = $seqin->next_seq()) {
+	if ( exists $data{ $seq->display_id() } ) {
+		my $sseq = $seq->seq();
+		$sseq=~s/\*//g;
+		$seq->seq($sseq);
+		$protein{ $seq->display_id() } = $seq;
+		#print $seq->display_id(),"\t",$seq->length(),"\n";
+	}
+}
 
 my %outfh;
 
-$outfh{'counts'} = FileHandle->new(">".$outfile);
-autoflush { $outfh{'counts'} } 1;
-$LOGGER->logdie($!) if (! defined $outfh{'counts'});
+my $tmpdir = tempdir('pepeXXXX', CLEANUP=>1, DIR=>'./');
 
-my %data;
-foreach my $idfile (glob("$indir/$sample$suffix")) {
-	my $bnfile = basename($idfile);
-	$LOGGER->info("Processing [$sample] $bnfile ...");
-	open(IN, "<", $idfile) or $LOGGER->logdie($!);
-	while(<IN>) {
-		chomp;
-		my @F = split(/\t/, $_);
-		unless ($countprotein) {
-			$F[0] =~s/\.\d+//;
-		}
-		$data{$F[3]}->{$F[0]} = undef unless (exists $data{$F[3]}->{$F[0]});
-	}
-	close(IN);
+foreach my $protid (keys %data) {
+	#print $protid,"\n";
+	
+	my $seqout = Bio::SeqIO->new(-file=>'>'.$tmpdir.'/'.$protid.'.fa', -format=>'FASTA');
+	$seqout->write_seq( $protein{ $protid } );
+	my $coordsparam='';
+	
+	foreach my $ar_data (@{ $data{$protid} }) {
+		$coordsparam.=' -c '.$ar_data->[1].' '.$ar_data->[2];
+	}	
+	
+	$coordsparam||='';
+	
+	my $gcbedcmd = "$Bin/hydroplot.py -i $tmpdir/$protid.fa  -s hw $coordsparam -w 9 -o $outdir/$protid.png";
+
+	system($gcbedcmd) == 0 or $LOGGER->logdie("System call ($gcbedcmd) failed");
+	
 }
 
-my @gene;
-foreach my $q (keys %data) {
-	foreach my $s (keys %{$data{$q}}) {
-		push(@gene, $s);
-	}
-}
-
-my %count;
-foreach my $g (sort {$a cmp $b} @gene) {
-	$count{$g} = 0 unless (exists $count{$g});
-	$count{$g}++;
-}
-
-foreach my $g (sort { $count{$b} <=> $count{$a} } keys %count) {
-	print { $outfh{'counts'} } $g,"\t",$count{$g},"\n";
-}
-
-foreach my $s (keys %outfh) {
-	$outfh{$s}->close();
-}
-
-# Subroutines
 
 sub Usage {
     my ($msg) = @_;
@@ -171,10 +182,9 @@ Argument(s)
 
 	-h	--help		Help
 	-l	--level		Log level [Default: FATAL]
-	-i	--indir		Input directory
-	-s	--sample	Sample name
-	-x	--suffix	Suffix
-	-o	--outfile	Output file
+	-i	--infile	Input file with peaks
+	-o	--outdir	Output directory
+	-p	--protfile	Protein fasta (.fa) file
 
 END_USAGE
     print STDERR "\nERR: $msg\n\n" if $msg;

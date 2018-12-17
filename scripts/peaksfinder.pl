@@ -66,8 +66,12 @@ use Getopt::Long;
 
 use File::Basename;
 
+use Bio::SeqIO;
+
 use vars qw/$LOGGER/;
 use FileHandle;
+
+use File::Temp qw/ tempfile tempdir /;
 
 INIT {
     use Log::Log4perl qw/:easy/;
@@ -75,16 +79,15 @@ INIT {
     $LOGGER = Log::Log4perl->get_logger($0);
 }
 
-my ($level, $indir, $sample, $suffix, $outfile, $countprotein);
+my ($level, $infile, $minsize, $maxsize, $id);
 
-Usage("Too few arguments") if $#ARGV < 0;
+#Usage("Too few arguments") if $#ARGV < 0;
 GetOptions( "h|?|help" => sub { &Usage(); },
             "l|level=s"=> \$level,
-	    "i|indir=s"=>\$indir,
-	    "s|sample=s"=>\$sample,
-	    "o|outfile=s"=>\$outfile,
-	    "x|suffix=s"=>\$suffix,
-	    "p|protein"=>\$countprotein
+	    "i|infile=s"=>\$infile,
+            "n|minsize=i"=>\$minsize,
+            "m|maxsize=i"=>\$maxsize,
+            "d|id=s"=>\$id
     ) or &Usage();
 
 
@@ -102,60 +105,105 @@ if ($level) {
     Log::Log4perl->easy_init($LEVEL{$level});
 }
 
-$LOGGER->logdie("Missing input directory") if (!defined $indir);
-$LOGGER->logdie("Wrong input directory ($indir)") if (! -e $indir);
+$id||='UNKNOWN';
 
-$LOGGER->logdie("Missing sample name") if (! defined $sample);
-
-$LOGGER->logdie("Missing suffix") if (! defined $suffix);
-
-$LOGGER->logdie("Missing output file") if (!defined $outfile);
+my @data;
+$minsize||=0;
+$maxsize||=1000000000;
 
 
-my %outfh;
-
-$outfh{'counts'} = FileHandle->new(">".$outfile);
-autoflush { $outfh{'counts'} } 1;
-$LOGGER->logdie($!) if (! defined $outfh{'counts'});
-
-my %data;
-foreach my $idfile (glob("$indir/$sample$suffix")) {
-	my $bnfile = basename($idfile);
-	$LOGGER->info("Processing [$sample] $bnfile ...");
-	open(IN, "<", $idfile) or $LOGGER->logdie($!);
+if ($infile) {
+	$LOGGER->logdie("Wrong input genomeCoverageBed output file ($infile)") if (! -e $infile);
+	open(IN, "<", $infile) or $LOGGER->logdie($!);
 	while(<IN>) {
 		chomp;
-		my @F = split(/\t/, $_);
-		unless ($countprotein) {
-			$F[0] =~s/\.\d+//;
-		}
-		$data{$F[3]}->{$F[0]} = undef unless (exists $data{$F[3]}->{$F[0]});
+		my @F=split(/\t/, $_);
+		push(@data, $F[2]);
 	}
 	close(IN);
-}
-
-my @gene;
-foreach my $q (keys %data) {
-	foreach my $s (keys %{$data{$q}}) {
-		push(@gene, $s);
+} elsif (! -t STDIN) {
+	while(<STDIN>) {
+		chomp;
+		push(@data, $_);
 	}
 }
 
-my %count;
-foreach my $g (sort {$a cmp $b} @gene) {
-	$count{$g} = 0 unless (exists $count{$g});
-	$count{$g}++;
-}
+my $proteinsize=scalar(@data);
+if ( $proteinsize > 0 ) {
 
-foreach my $g (sort { $count{$b} <=> $count{$a} } keys %count) {
-	print { $outfh{'counts'} } $g,"\t",$count{$g},"\n";
-}
+	# Determine mean. Or use Statistics::Descriptive.
+	my $sum;
+	$sum += $_ for @data;
+	my $mean = $sum / @data;
 
-foreach my $s (keys %outfh) {
-	$outfh{$s}->close();
-}
+	# Make a pass over the data to find contiguous runs of values
+	# that are either less than or greater than the mean. Also
+	# keep track of the mins and maxes within those groups.
+	my $group = -1;
+	my $gt_mean_prev = '';
+	my @mins_maxs;
+	my $i = -1;
 
-# Subroutines
+	for my $d (@data){
+	    $i ++;
+	    my $gt_mean = $d > $mean ? 1 : 0;
+
+	    unless ($gt_mean eq $gt_mean_prev){
+		$gt_mean_prev = $gt_mean;
+		$group ++;
+		$mins_maxs[$group] = $d;
+	    }
+
+	    if ($gt_mean){
+		$mins_maxs[$group] = $d if $d > $mins_maxs[$group];
+	    }
+	    else {
+		$mins_maxs[$group] = $d if $d < $mins_maxs[$group];
+	    }
+
+	    $d = {
+		i       => $i,
+		val     => $d,
+		group   => $group,
+		gt_mean => $gt_mean,
+	    };
+	}
+
+	# A fun picture.
+	my @coord;
+	my $j = 0;
+	my $set;
+	for my $d (@data){
+		if (defined $set) {
+			if (!$d->{gt_mean}) {
+				$coord[$j]->[1] = $d->{i}-1;
+				$set = undef;
+				$j++;
+			}
+		} else {
+			if ($d->{gt_mean}) {
+				$coord[$j] = [$d->{i}, $#data];
+				$set = 1;
+			}
+		}
+	#    printf
+	#        "%6.1f  %2d  %1s  %1d  %3s  %s\n",
+	#        $d->{val},
+	#        $d->{i},
+	#        $d->{gt_mean} ? '+' : '-',
+	#        $d->{group},
+	#        $d->{val} == $mins_maxs[$d->{group}] ? '==>' : '',
+	#        '.' x ($d->{val} / 2)
+	#    ;
+	}
+
+	foreach my $c (0..$#coord) {
+		my $len = $coord[$c]->[1]-$coord[$c]->[0];
+		if (($len>=$minsize)&&($len<=$maxsize)) {
+			print $id,"\t",join("\t", @{$coord[$c]}[0,1]),"\t",$len,"\t",$proteinsize,"\n";
+		}
+	}
+}
 
 sub Usage {
     my ($msg) = @_;
@@ -171,10 +219,10 @@ Argument(s)
 
 	-h	--help		Help
 	-l	--level		Log level [Default: FATAL]
-	-i	--indir		Input directory
-	-s	--sample	Sample name
-	-x	--suffix	Suffix
-	-o	--outfile	Output file
+	-i	--infile	Input file (genomeCoverageBed output file) or STDIN with coverage
+	-n	--minsize	Minimum size [Default: 0]
+	-m	--maxsize	Maximum size [Default: 1000000000]
+	-d	--id		Identifier [Deafaut: UNKNOWN]
 
 END_USAGE
     print STDERR "\nERR: $msg\n\n" if $msg;
@@ -182,4 +230,3 @@ END_USAGE
     print STDERR $USAGE;
     exit(1);
 }
-

@@ -137,6 +137,7 @@ my $i = 0;
 
 my %read;
 my %bestqframeerr;
+my %bestscore;
 while(<IN>) {
 chomp;
 	$i++;
@@ -144,10 +145,9 @@ chomp;
 		$progress->update($i);
 	}
 	
-	my ($qseqid, $qlen, $sseqid, $bitscore, $qcovhsp, $qframe) = split(/\t/, $_);
+	my ($qseqid, $qlen, $sseqid, $bitscore, $qcovhsp, $qframe, $sstart, $send) = split(/\t/, $_);
 
-	
-	$sseqid =~s/\.\d+$//;
+	#$sseqid =~s/\.\d+$//;
 	my $r = 1;
 	if ($qseqid=~/\/(\d+)$/) {
 		$r = $1;
@@ -165,11 +165,11 @@ chomp;
 	}
 	
 	if (! exists $read{$qseqid}->{$r}) {
-		$read{$qseqid}->{$r}->{$sseqid} = $bitscore;
+		$read{$qseqid}->{$r}->{$sseqid} = [$bitscore, $sstart, $send];
+		$bestscore{$qseqid}->{$r} = $bitscore;
 	} else {
-		my ($first) = [ keys %{ $read{$qseqid}->{$r} } ]->[0];
-		if ( $bitscore >= ($read{$qseqid}->{$r}->{$first}-(0.00*$read{$qseqid}->{$r}->{$first})) ) {
-			$read{$qseqid}->{$r}->{$sseqid} = $bitscore;;
+		if ( $bitscore >= ($bestscore{$qseqid}->{$r}-(0.00*$bestscore{$qseqid}->{$r})) ) {
+			$read{$qseqid}->{$r}->{$sseqid} = [$bitscore, $sstart, $send];
 		}
 	}
 }
@@ -195,10 +195,14 @@ foreach my $qseqid (keys %read) {
 		
 		if (scalar(keys %{ $read{$qseqid}->{$r} }) == 1) {
 			my ($sseqid) = keys %{ $read{$qseqid}->{$r} };
-			print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\n";
+			#OLD: M03855:91:000000000-B4GJ9:1:2108:9708:19434	AT3G48990	75	128
+			#print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\n";
+			#BED: AT3G48990.1	75	128	M03855:91:000000000-B4GJ9:1:2108:9708:19434	0	+
+			print { $outfh{'id'} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
 		} else {
 			foreach my $sseqid (keys %{ $read{$qseqid}->{$r} }) {
-				print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\n";
+				#print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\n";
+				print { $outfh{'notid'} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
 			}
 		}
 	} else {
@@ -212,10 +216,31 @@ foreach my $qseqid (keys %read) {
 		}
 		if (scalar(@match)==1) {
 			my $sseqid = $match[0];
-			print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\n";
+			my ($min_start, $max_end) = (1000000,0);
+			foreach my $r (1,2) {
+				if ($read{$qseqid}->{$r}->{$sseqid}->[1] < $min_start) {
+					$min_start = $read{$qseqid}->{$r}->{$sseqid}->[1];
+				}
+				if ($read{$qseqid}->{$r}->{$sseqid}->[2] > $max_end) {
+					$max_end = $read{$qseqid}->{$r}->{$sseqid}->[2];
+				}
+			}
+			#print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\t",join("\t",$min_start,$max_end),"\n";
+			print { $outfh{'id'} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
 		} else {
 			foreach my $sseqid ( @match ) {
-				print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\n";
+				my ($min_start, $max_end) = (1000000,0);
+				foreach my $r (1,2) {
+					if ($read{$qseqid}->{$r}->{$sseqid}->[1] < $min_start) {
+						$min_start = $read{$qseqid}->{$r}->{$sseqid}->[1];
+					}
+					if ($read{$qseqid}->{$r}->{$sseqid}->[2] > $max_end) {
+						$max_end = $read{$qseqid}->{$r}->{$sseqid}->[2];
+					}
+				}
+				
+				#print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\t",join("\t",$min_start,$max_end),"\n";
+				print { $outfh{'notid'} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
 			}
 		}
 	}
