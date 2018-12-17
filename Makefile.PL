@@ -11,7 +11,8 @@ WriteMakefile(
     PREREQ_PM         => {	'Term::ProgressBar'=>'0',
 				'Log::Log4perl'=>'0',
 				'Bio::Tools::CodonTable'=>'0',
-				'Bio::Seq'=>'0'
+				'Bio::Seq'=>'0',
+				'Bio::SeqIO'=>'0'
 			}, # e.g., Module::Name => 1.1
     ABSTRACT_FROM     => 'lib/PEPE/SeqAn.pm', # retrieve abstract from module
     AUTHOR            => 'Daniel Guariz Pinheiro <dgpinheiro@gmail.com>',
