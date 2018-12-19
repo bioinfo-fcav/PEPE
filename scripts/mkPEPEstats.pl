@@ -155,24 +155,25 @@ foreach my $bedfile (glob("$indir/*.bed")) {
 		$analysis{'Nhits'} = 0 unless (exists $analysis{'Nhits'});
 		$analysis{'Nhits'}++;
 		$prot{$F[0]}=undef;
-		my ($g) = $F[0]=~s/\.\d+$//;
+		my ($g) = $F[0]=~/^([^\.]+)/;
 		$gene{$g}=undef;
 		$read{$F[3]}=undef;
 	}
 	close(IN);
+
 	$analysis{'Nproteins'} = scalar(keys %prot);
 	$analysis{'Ngenes'} = scalar(keys %gene);
 	$analysis{'Nreads'} = scalar(keys %read);
-	foreach my $analysis (keys %analysis) {
-		$beddata{ $sample }->{ $analysis.'.'.$suffix } = 0 unless (exists $beddata{ $sample }->{ $analysis.'.'.$suffix });
-		$beddata{ $sample }->{ $analysis.'.'.$suffix }++;
-		$bedheader{ $analysis.'.'.$suffix } = undef;
+	foreach my $anls (keys %analysis) {
+		$beddata{ $sample }->{ $anls.'.'.$suffix } = 0 unless (exists $beddata{ $sample }->{ $anls.'.'.$suffix });
+		$beddata{ $sample }->{ $anls.'.'.$suffix } = $analysis{$anls};
+		#print ">>>>",$sample,"\t",$anls.'.'.$suffix,"\t",$analysis{$anls},"\n";
+		$bedheader{ $anls.'.'.$suffix } = undef;
 	}
 }
 
 my @fastqh = (sort { $a cmp $b } keys %fastqheader);
 my @bedh = (sort { $a cmp $b } keys %bedheader);
-
 
 my %finalgene;
 open(IN, "<", $finalfile) or $LOGGER->logdie($!);
