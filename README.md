@@ -44,3 +44,7 @@ get the index (Athaliana_447_Araport11.dmnd).
  time ./run.sh ../example/data/INPUT_R1.fastq ../example/data/INPUT_R2.fastq ../example/barcodes.txt ../example/output/ BSA ../../Atha/refs/DIAMOND/Athaliana_447_Araport11.dmnd ../../Atha/refs/Athaliana_447_Araport11.geneName.txt ../../Atha/refs/Athaliana_447_Araport11.defline.txt
 ```
 
+### Flowchart diagram:
+
+![Flowchart diagram](https://raw.githubusercontent.com/bioinfo-fcav/PEPE/master/DiagramPEP-Seq-v4.png)
+
