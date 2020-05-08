@@ -29,7 +29,7 @@
 
 	Reference files from Phytozome [https://phytozome.jgi.doe.gov/]:
 	
-		(*) Examples for *Arabidopsis thaliana*
+		Files for **Arabidopsis thaliana**:
 		
 		Athaliana_447_Araport11.protein.fa
 		Athaliana_447_Araport11.geneName.txt
