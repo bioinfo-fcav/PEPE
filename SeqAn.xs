@@ -30,31 +30,62 @@ namespace seqan {
 			}
 		};
 
-
-	//seqan::String<char> align(Dna5String seqV, Dna5String seqH)
-	std::string align(Dna5String seqV, Dna5String seqH)
+	
+	std::string align(Dna5String seqV, Dna5String seqH, int alnType, int match, int mismatch, int gapExtendScore, int gapOpenScore)
 	{
 		typedef int TValue;
 		typedef Score<TValue, ScoreMatrix<Dna5, UserDefinedMatrix> > TScoringScheme;
-		int const gapOpenScore = -2;
-		int const gapExtendScore = -1;
-		TScoringScheme userScoringSchemeDna(gapExtendScore, gapOpenScore);
-		
+		//TScoringScheme userScoringSchemeDna(gapExtendScore, gapOpenScore);
+		Score<int, Simple> userScoringSchemeDna(match, mismatch, gapExtendScore, gapOpenScore);
+
 		Align<Dna5String> align;
 		resize(rows(align), 2);
 		assignSource(row(align, 0), seqH);
 		assignSource(row(align, 1), seqV);
 		
-		//AlignConfig<TTop, TLeft, TRight, TDown>
-		AlignConfig<true, false, false, true> alignConfig;
-
-		int result = globalAlignment(align, userScoringSchemeDna, alignConfig);
-
+		int result;
+		switch (alnType) {
+			case 1:
+				result = localAlignment(align, userScoringSchemeDna);
+				break;
+			case 2:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<false, false, false, false>());
+				// ordinary global alignment
+				break;
+			case 3:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<true, false, false, true>());
+				//semiglobal alignment, free begin and end gaps in second/vertical sequence
+				break;
+			case 4:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<false, true, true, false>());
+				//semiglobal alignment, free begin and end gaps in first/horizontal sequence
+				break;
+			case 5:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<false, true, false, true>());
+				//overlap alignment with second/vertical sequence overhanging to the left of first/horizontal
+				break;
+			case 6:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<true, false, true, false>());
+				//overlap alignment with first/horizontal sequence overhanging to the left of second/vertical
+				break;
+			case 7:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<false, true, false, false>());
+				//free begin gaps in second/vertical sequence only
+				break;
+			case 8:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<false, false, true, false>());
+				//free end gaps in second/vertical sequence only
+				break;
+			default:
+				result = globalAlignment(align, userScoringSchemeDna, AlignConfig<true, false, false, true>());
+				//semiglobal alignment, free begin and end gaps in second/vertical sequence
+				break;
+		}
 		//std::cout << "Score: " << result << "\n";
 		//std::cout << "The resulting alignment is\n"
 		//	<< row(align,0) << "\n" << row(align,1) << "\n";
 		std::stringstream buffer;
-		buffer << result << ";" << row(align,0) << ";" << row(align,1);
+		buffer << result << ";" << row(align,0) << ";" << row(align,1) << ";" << (beginPosition(row(align,1))+1) << ";" << (endPosition(row(align,1))+1);
 		return buffer.str();
 	}
 
@@ -79,8 +110,8 @@ public:
 
 	}
 
-	char * Align2Seq(char * seqV, char * seqH ) {
-		std::string str = align(seqV, seqH);
+	char * Align2Seq(char * seqV, char * seqH, int alnType=0, int match=2, int mismatch=-1, int gapExtendScore=-1, int gapOpenScore=-2) {
+		std::string str = align(seqV, seqH, alnType, match, mismatch, gapExtendScore, gapOpenScore);
 
 		char* chr = strdup(str.c_str());
 		return chr;
@@ -97,7 +128,7 @@ MyClass *
 MyClass::new();
 
 char *
-MyClass::Align2Seq(char * seqV, char * seqH)
+MyClass::Align2Seq(char * seqV, char * seqH, int alnType=0, int match=2, int mismatch=-1, int gapExtendScore=-1, int gapOpenScore=-2)
 
 void
 MyClass::DESTROY()

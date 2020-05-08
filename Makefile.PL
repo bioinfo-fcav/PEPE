@@ -1,4 +1,3 @@
-use 5.022001;
 use ExtUtils::MakeMaker;
 
 my $CC = 'g++';
@@ -8,12 +7,19 @@ my $CC = 'g++';
 WriteMakefile(
     NAME              => 'PEPE::SeqAn',
     VERSION_FROM      => 'lib/PEPE/SeqAn.pm', # finds $VERSION, requires EU::MM from perl >= 5.5
-    PREREQ_PM         => {	'Term::ProgressBar'=>'0',
-				'Log::Log4perl'=>'0',
-				'Bio::Tools::CodonTable'=>'0',
-				'Bio::Seq'=>'0',
-				'Bio::SeqIO'=>'0'
+    PREREQ_PM         => {	'Term::ProgressBar'=>'2.17',
+				'Log::Log4perl'=>'1.44',
+				'Bio::Root::Version'=>'1.006924',
+				'Test::More'=>'1.001014',
+				'Term::ProgressBar'=>'2.17',
+				'FileHandle'=>'2.02',
+				'Getopt::Long'=>'2.45',
+				'File::Basename'=>'2.85',
+				'File::Temp'=>'0.2304',
+				'FindBin'=>'1.51',
+				'XSLoader'=>'0.20'
 			}, # e.g., Module::Name => 1.1
+    MIN_PERL_VERSION => '5.22.1',
     ABSTRACT_FROM     => 'lib/PEPE/SeqAn.pm', # retrieve abstract from module
     AUTHOR            => 'Daniel Guariz Pinheiro <dgpinheiro@gmail.com>',
     #LICENSE           => 'perl',
