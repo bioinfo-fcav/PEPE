@@ -70,7 +70,11 @@ use vars qw/$LOGGER/;
 use Term::ProgressBar;
 use FileHandle;
 
-use SeqAn;
+use constant DEFAULT_MODEL_ADAPTER_SEQUENCE_3PRIME=>'CCTCTAAACGGGTCTTGAGGGGTT';
+
+
+
+use PEPE::SeqAn;
 
 INIT {
     use Log::Log4perl qw/:easy/;
@@ -78,7 +82,7 @@ INIT {
     $LOGGER = Log::Log4perl->get_logger($0);
 }
 
-my ($level, $ambfile, $outdir, $barcodesfile, $suffix);
+my ($level, $ambfile, $outdir, $barcodesfile, $suffix, $model_adapter_sequence_3prime);
 
 Usage("Too few arguments") if $#ARGV < 0;
 GetOptions( "h|?|help" => sub { &Usage(); },
@@ -86,6 +90,7 @@ GetOptions( "h|?|help" => sub { &Usage(); },
 	    "a|ambfile=s"=>\$ambfile,
 	    "o|outdir=s"=>\$outdir,
 	    "b|barcodes=s"=>\$barcodesfile,
+            "m3p|model3pseq=s"=>\$model_adapter_sequence_3prime,
 	    "s|suffix=s"=>\$suffix
     ) or &Usage();
 
@@ -103,6 +108,8 @@ if ($level) {
     $LOGGER->logdie("Wrong log level ($level). Choose one of: ".join(', ', keys %LEVEL)) unless (exists $LEVEL{$level});
     Log::Log4perl->easy_init($LEVEL{$level});
 }
+
+$model_adapter_sequence_3prime||=DEFAULT_MODEL_ADAPTER_SEQUENCE_3PRIME;
 
 $LOGGER->logdie("Missing input fastq file") if (!defined $ambfile);
 $LOGGER->logdie("Wrong input fastq file ($ambfile)") if (! -e $ambfile);
@@ -178,7 +185,7 @@ print "Processing ($seqcount) fragments [$bn] ...\n";
 
 $progress = Term::ProgressBar->new($seqcount);
 
-my $seqan = new SeqAn();
+my $seqan = new PEPE::SeqAn();
 
 $i=0;
 foreach my $ar_read (@read) {
@@ -228,7 +235,7 @@ foreach my $ar_read (@read) {
 				#print "************** NEW SAMPLE **************\t",$sample{$s}->{'name'},"\n";
 				my $start = $p;
 				my $end = length($seq);
-				my ($scorer, $aln1r, $aln2r) = split(';', $seqan->Align2Seq('CCTCTAAACGGGTCT',$seq));
+				my ($scorer, $aln1r, $aln2r) = split(';', $seqan->Align2Seq($model_adapter_sequence_3prime, $seq));
 				while ($aln2r=~/^-/g) {
 					$aln2r=~s/^-//;
 					$aln1r=~s/^.//;
@@ -240,7 +247,7 @@ foreach my $ar_read (@read) {
 				$aln1r=~s/-/\./g;
 
 				if ($seq=~/($aln1r)/g) {
-					$end = pos($seq)-15; # CCTCTAAACGGGTCT (15 bases)
+					$end = pos($seq)-length($model_adapter_sequence_3prime);
 				}
 				print { $sample{ $s }->{'afh'} } $id,"\t$tag\t$ar_read->[0]->[2]\t$s\n",substr($seq,$start,($end-$start)),"\n","+\n",substr($qual,$start,($end-$start)),"\n";
 			}
@@ -259,6 +266,9 @@ foreach my $s (keys %sample) {
 
 sub Usage {
     my ($msg) = @_;
+
+	$model_adapter_sequence_3prime=DEFAULT_MODEL_ADAPTER_SEQUENCE_3PRIME;
+
     my $USAGE = <<"END_USAGE";
 Daniel Guariz Pinheiro (dgpinheiro\@gmail.com)
 (c)2018 Universidade Estadual Paulista "Júlio de Mesquita Filho"
@@ -274,6 +284,7 @@ Argument(s)
 	-a	--ambfile	Ambiguous fastq file
 	-o	--outdir	Output directory
 	-b	--barcodes	Barcodes file
+	-m3p	--model3pseq	Model adapter sequence 3' [Default: $model_adapter_sequence_3prime]
 	-s	--suffix	Suffix added to output file [Default .fastq]
 
 END_USAGE

@@ -119,6 +119,14 @@ $outfh{'id'} = FileHandle->new(">".$outdir.'/'.$sample.'.id'.$suffix);
 autoflush { $outfh{'id'} } 1;
 $LOGGER->logdie($!) if (! defined $outfh{'id'});
 
+$outfh{'id.wrongframe'} = FileHandle->new(">".$outdir.'/'.$sample.'.id_wrongframe'.$suffix);
+autoflush { $outfh{'id.wrongframe'} } 1;
+$LOGGER->logdie($!) if (! defined $outfh{'id.wrongframe'});
+
+$outfh{'notid.wrongframe'} = FileHandle->new(">".$outdir.'/'.$sample.'.notid_wrongframe'.$suffix);
+autoflush { $outfh{'notid.wrongframe'} } 1;
+$LOGGER->logdie($!) if (! defined $outfh{'notid.wrongframe'});
+
 $outfh{'notid'} = FileHandle->new(">".$outdir.'/'.$sample.'.notid'.$suffix);
 autoflush { $outfh{'notid'} } 1;
 $LOGGER->logdie($!) if (! defined $outfh{'notid'});
@@ -135,9 +143,10 @@ open(IN, "<", $infile) or $LOGGER->logdie($!);
 
 my $i = 0;
 
+my %wrongframe;
+my %correctframe;
+
 my %read;
-my %bestqframeerr;
-my %bestscore;
 while(<IN>) {
 chomp;
 	$i++;
@@ -146,7 +155,12 @@ chomp;
 	}
 	
 	my ($qseqid, $qlen, $sseqid, $bitscore, $qcovhsp, $qframe, $sstart, $send) = split(/\t/, $_);
-
+	
+	my $frameok=1;
+	if ($qframe!=$frameok) {
+		$frameok=0;
+	}
+	
 	#$sseqid =~s/\.\d+$//;
 	my $r = 1;
 	if ($qseqid=~/\/(\d+)$/) {
@@ -154,24 +168,14 @@ chomp;
 		$qseqid=~s/\/(\d+)$//;
 	}
 	
-	if ($r == 1) {
-		if ($qframe != 1) {
-			$bestqframeerr{ $qseqid } = $sseqid;
+	if (! exists $read{$qseqid}->{$r}->{$frameok}->{$sseqid}) {
+		$read{$qseqid}->{$r}->{$frameok}->{$sseqid} = [$bitscore, $sstart, $send];
+	} else {
+		if ($read{$qseqid}->{$r}->{$frameok}->{$sseqid} < $bitscore) {
+			$read{$qseqid}->{$r}->{$frameok}->{$sseqid} = [$bitscore, $sstart, $send];
 		}
-	}	
-
-	if (exists $bestqframeerr{ $qseqid }) {
-		next;
 	}
 	
-	if (! exists $read{$qseqid}->{$r}) {
-		$read{$qseqid}->{$r}->{$sseqid} = [$bitscore, $sstart, $send];
-		$bestscore{$qseqid}->{$r} = $bitscore;
-	} else {
-		if ( $bitscore >= ($bestscore{$qseqid}->{$r}-(0.00*$bestscore{$qseqid}->{$r})) ) {
-			$read{$qseqid}->{$r}->{$sseqid} = [$bitscore, $sstart, $send];
-		}
-	}
 }
 close(IN);
 $progress->update($i);
@@ -187,64 +191,79 @@ foreach my $qseqid (keys %read) {
 	if ( ($i%10) == 0 ) {
 		$progress->update($i);
 	}
+
 	my @subject;
-	if (scalar(keys %{ $read{$qseqid} }) == 1) {
-		my ($r) = %{ $read{$qseqid} };
-		# Discard match if only read 2 had previously selected
-		next if ($r == 2);
-		
-		if (scalar(keys %{ $read{$qseqid}->{$r} }) == 1) {
-			my ($sseqid) = keys %{ $read{$qseqid}->{$r} };
-			#OLD: M03855:91:000000000-B4GJ9:1:2108:9708:19434	AT3G48990	75	128
-			#print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\n";
-			#BED: AT3G48990.1	75	128	M03855:91:000000000-B4GJ9:1:2108:9708:19434	0	+
-			print { $outfh{'id'} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+	my $status;
+
+	foreach my $frameok (1, 0) {
+
+		if (scalar(keys %{ $read{$qseqid} }) == 1) {
+			my ($r) = %{ $read{$qseqid} };
+			# Discard match if only read 2 was previously selected
+			next if ($r == 2);
+			
+			# neste caso, com o $frameok==1 na chave do hash eu estou comparando somente no grupo dos que estão no frame 1 (correto)
+			# se remover essa chave, considero também no grupo dos que não estão no frame 1
+			if (scalar(keys %{ $read{$qseqid}->{$r}->{$frameok} }) == 1) {
+				my ($sseqid) = keys %{ $read{$qseqid}->{$r}->{$frameok} };
+				#OLD: M03855:91:000000000-B4GJ9:1:2108:9708:19434	AT3G48990	75	128
+				#BED: AT3G48990.1	75	128	M03855:91:000000000-B4GJ9:1:2108:9708:19434	0	+
+				$status=(($frameok) ? 'id' : 'id.wrongframe');
+				
+				print { $outfh{$status} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$frameok}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+			} else {
+				foreach my $sseqid (keys %{ $read{$qseqid}->{$r}->{$frameok} }) {
+					$status=(($frameok) ? 'notid' : 'notid.wrongframe');
+					
+					print { $outfh{$status} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$frameok}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+				}
+			}
+
 		} else {
-			foreach my $sseqid (keys %{ $read{$qseqid}->{$r} }) {
-				#print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\n";
-				print { $outfh{'notid'} } $sseqid,"\t",join("\t",@{ $read{$qseqid}->{$r}->{$sseqid}}[1,2]),"\t",$qseqid,"\t",0,"\t",'+',"\n";
-			}
-		}
-	} else {
-		my @match;
-		foreach my $sseqid1 (keys  %{ $read{$qseqid}->{1} }) {
-			foreach my $sseqid2 (keys %{ $read{$qseqid}->{2} }) {
-				if ($sseqid1 eq $sseqid2) {
-					push(@match, $sseqid1);
+			my @match;
+			foreach my $sseqid1 (keys  %{ $read{$qseqid}->{1}->{$frameok} }) {
+				foreach my $sseqid2 (keys %{ $read{$qseqid}->{2}->{$frameok} }) {
+					if ($sseqid1 eq $sseqid2) {
+						push(@match, $sseqid1);
+					}
 				}
 			}
-		}
-		if (scalar(@match)==1) {
-			my $sseqid = $match[0];
-			my ($min_start, $max_end) = (1000000,0);
-			foreach my $r (1,2) {
-				if ($read{$qseqid}->{$r}->{$sseqid}->[1] < $min_start) {
-					$min_start = $read{$qseqid}->{$r}->{$sseqid}->[1];
-				}
-				if ($read{$qseqid}->{$r}->{$sseqid}->[2] > $max_end) {
-					$max_end = $read{$qseqid}->{$r}->{$sseqid}->[2];
-				}
-			}
-			#print { $outfh{'id'} } $qseqid,"\t",$sseqid,"\t",join("\t",$min_start,$max_end),"\n";
-			print { $outfh{'id'} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
-		} else {
-			foreach my $sseqid ( @match ) {
+			if (scalar(@match)==1) {
+				my $sseqid = $match[0];
 				my ($min_start, $max_end) = (1000000,0);
 				foreach my $r (1,2) {
-					if ($read{$qseqid}->{$r}->{$sseqid}->[1] < $min_start) {
-						$min_start = $read{$qseqid}->{$r}->{$sseqid}->[1];
+					if ($read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[1] < $min_start) {
+						$min_start = $read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[1];
 					}
-					if ($read{$qseqid}->{$r}->{$sseqid}->[2] > $max_end) {
-						$max_end = $read{$qseqid}->{$r}->{$sseqid}->[2];
+					if ($read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[2] > $max_end) {
+						$max_end = $read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[2];
 					}
 				}
 				
-				#print { $outfh{'notid'} } $qseqid,"\t",$sseqid,"\t",join("\t",$min_start,$max_end),"\n";
-				print { $outfh{'notid'} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+				$status=(($frameok) ? 'id' : 'id.wrongframe');
+
+				print { $outfh{$status} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+			} else {
+				foreach my $sseqid ( @match ) {
+					my ($min_start, $max_end) = (1000000,0);
+					foreach my $r (1,2) {
+						if ($read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[1] < $min_start) {
+							$min_start = $read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[1];
+						}
+						if ($read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[2] > $max_end) {
+							$max_end = $read{$qseqid}->{$r}->{$frameok}->{$sseqid}->[2];
+						}
+					}
+					
+					$status=(($frameok) ? 'notid' : 'notid.wrongframe');
+
+					print { $outfh{$status} } $sseqid,"\t",join("\t",$min_start,$max_end),"\t",$qseqid,"\t",0,"\t",'+',"\n";
+				}
 			}
 		}
 	}
 }
+
 $progress->update($i);
 
 foreach my $s (keys %outfh) {

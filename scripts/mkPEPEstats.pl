@@ -75,15 +75,17 @@ INIT {
     $LOGGER = Log::Log4perl->get_logger($0);
 }
 
-my ($level, $indir, $sample, $suffix, $outfile, $countprotein, $finalfile, $protdef);
+my ($level, $indir, $sample, $suffix, $outfile, $countprotein, $finalfile, $anninfofile, $deflinefile, $bcfile);
 
 Usage("Too few arguments") if $#ARGV < 0;
 GetOptions( "h|?|help" => sub { &Usage(); },
             "l|level=s"=> \$level,
 	    "i|indir=s"=>\$indir,
+            "b|bcfile=s"=>\$bcfile,
 	    "o|outfile=s"=>\$outfile,
 	    "f|final=s"=>\$finalfile,
-            "p|protdef=s"=>\$protdef
+            "a|anninfo=s"=>\$anninfofile,
+            "d|defline=s"=>\$deflinefile
     ) or &Usage();
 
 
@@ -109,6 +111,27 @@ $LOGGER->logdie("Missing output file") if (!defined $outfile);
 $LOGGER->logdie("Missing final output file") if (!defined $finalfile);
 $LOGGER->logdie("Wrong final output file ($finalfile)") if (! -e $finalfile);
 
+$LOGGER->logdie("Missing barcodes file") if (!defined $bcfile);
+$LOGGER->logdie("Wrong barcodes file ($bcfile)") if (! -e $bcfile);
+
+$LOGGER->logdie("Missing annotation_info file") if (!defined $anninfofile);
+$LOGGER->logdie("Wrong annotation_info file ($anninfofile)") if (! -e $anninfofile);
+
+$LOGGER->logdie("Missing defline file") if (!defined $deflinefile);
+$LOGGER->logdie("Wrong defline file ($deflinefile)") if (! -e $deflinefile);
+
+open(BC, "<", $bcfile) or $LOGGER->logdie($!);
+my %biosample;
+while(<BC>) {
+	chomp;
+	my ($bcseq, $sample_name, $sample_group) = split(/\t/, $_);
+	$sample_name=~s/^\s*//;
+	$sample_name=~s/\s*$//;
+	$biosample{$sample_group}->{$sample_name} = $bcseq;
+}
+
+close(BC);
+
 my %outfh;
 
 $outfh{'counts'} = FileHandle->new(">".$outfile);
@@ -117,24 +140,149 @@ $LOGGER->logdie($!) if (! defined $outfh{'counts'});
 
 my %fastqdata;
 my %fastqheader;
-foreach my $idfile (glob("$indir/*.fastq")) {
+
+my @biosample_order = map {  sort keys %{ $biosample{$_} }   } sort keys %biosample;
+
+#print join(";", @biosample_order),"\n";
+
+my @ftype=(
+'assembled',
+'unassembled',
+'recovered.assembled',
+'recovered.unassembled',
+'inframe.assembled',
+'inframe.unassembled',
+'phage.assembled',
+'phage.unassembled',
+'decontaminated.assembled',
+'decontaminated.unassembled',
+'smallseq.assembled',
+'smallseq.unassembled',
+'empty.assembled',
+'empty.unassembled',
+'notinframe.assembled',
+'notinframe.unassembled',
+'recovered.assembled',
+'recovered.unassembled',
+'inframe.recovered.assembled',
+'inframe.recovered.unassembled',
+'phage.recovered.assembled',
+'phage.recovered.unassembled',
+'decontaminated.recovered.assembled',
+'decontaminated.recovered.unassembled',
+'smallseq.recovered.assembled',
+'smallseq.recovered.unassembled',
+'empty.recovered.assembled',
+'empty.recovered.unassembled',
+'notinframe.recovered.assembled',
+'notinframe.recovered.unassembled'
+);
+
+my @bsft_order;
+foreach my $bs (@biosample_order) {
+	foreach my $ft (@ftype) {
+		#print  $bs.'.'.$ft,"\n";
+		push(@bsft_order, $bs.'.'.$ft);
+	}
+}
+my @extra = (	'atropos_final',
+		'REFUSED',
+		'WRONGTEMPLATE',
+		'UNIDENTIFIED',
+		'AMBIGUOUS',
+		);
+
+my @e_order;
+foreach my $e (@extra) {
+	foreach my $ft ('assembled','unassembled') {
+		push(@e_order, $e.'.'.$ft);
+	}
+}
+
+
+my %info;
+my @info_order = (	'INPUT_READ_PAIRS',
+			'atropos_final',
+			@e_order,
+			@bsft_order
+		);
+
+my %disregarded;
+@disregarded{	
+		'atropos_final.unassembled.forward.blastx',
+		'atropos_final.unassembled.forward',
+		'atropos_final.unassembled.reverse',
+		'atropos_final.unassembled.reverse.blastx' } = ();
+
+
+@info{@info_order} = ();
+
+open(IN, "<", "$indir/atropos/atropos_insert.log.out.txt") or $LOGGER->logdie($!);
+while(<IN>) {
+	chomp;
+	if ($_=~/^Total read pairs processed:\s+(\S+)/) {
+		$info{"INPUT_READ_PAIRS"}=$1;
+		last;
+	}
+}
+close(IN);
+
+unless ($info{"INPUT_READ_PAIRS"}) {
+	$LOGGER->logdie("Wrong execution of ATROPOS!");
+} else {
+	$info{"INPUT_READ_PAIRS"}=~s/,//g;
+	$info{"INPUT_READ_PAIRS"}+=0;
+} 
+
+
+foreach my $idfile (glob("$indir/atropos/*_R1*.atropos_final.fastq"), glob("$indir/*.fastq")) {
 	my $bnfile = basename($idfile,'.fastq');
-	my ($sample, $suffix)=$bnfile=~/^([^\.]+)\.?(.*)/;
-	$suffix||='';
-	$LOGGER->info("Processing FASTQ [$sample] $bnfile ...");
+	$LOGGER->info("Processing FASTQ $bnfile ...");
+
 	open(IN, "<", $idfile) or $LOGGER->logdie($!);
 	while(<IN>) {
 		chomp;
 		#print $.,"\t".($.%4),"\n";
 		if ( ($.%4)==1 ) {
 			#print $_,"\n";
-			$fastqdata{ $sample }->{ $suffix } = 0 unless (exists $fastqdata{ $sample }->{ $suffix });
-			$fastqdata{ $sample }->{ $suffix }++;
-			$fastqheader{ $suffix } = undef;
+			$fastqdata{ $bnfile } = 0 unless (exists $fastqdata{ $bnfile });
+			$fastqdata{ $bnfile }++;
 		}
 	}
 	close(IN);
 }
+
+
+foreach my $bnfile (keys %fastqdata) {
+	my ($sample, $suffix)=$bnfile=~/^([^\.]+)\.?(.*)/;
+	$suffix||='';
+	if (exists $info{$bnfile}) {
+		$info{$bnfile} = $fastqdata{$bnfile};
+	} elsif (exists $info{$suffix}) {
+		$info{$suffix} = $fastqdata{$bnfile};
+	} elsif (exists $disregarded{$suffix}) {
+		# Nothing to do
+	} else {
+		$LOGGER->logdie("Not recognized: $bnfile");
+	}
+	
+}
+
+my @analysis_order;
+foreach my $tp ('Nreads', 'Ngenes', 'Nproteins') {
+	foreach my $cmp ('id.inframe', 'notid.inframe', 'id.decontaminated', 'notid.decontaminated', 'id_wrongframe.inframe') {
+		foreach my $asm ('assembled', 'recovered.assembled', 'unassembled', 'recovered.unassembled') {
+			push(@analysis_order, $tp.'.'.$cmp.'.'.$asm);
+		}
+	}
+}
+
+foreach my $id (@biosample_order) {
+	foreach my $an (@analysis_order) {
+		$info{ $id.'.'.$an } = undef;
+	}
+}
+
 
 my %bedheader;
 my %beddata;
@@ -165,6 +313,11 @@ foreach my $bedfile (glob("$indir/*.bed")) {
 	$analysis{'Ngenes'} = scalar(keys %gene);
 	$analysis{'Nreads'} = scalar(keys %read);
 	foreach my $anls (keys %analysis) {
+
+		if (exists $info{ $sample.'.'.$anls.'.'.$suffix }) {
+			$info{ $sample.'.'.$anls.'.'.$suffix } = $analysis{$anls}||0;
+		}
+		
 		$beddata{ $sample }->{ $anls.'.'.$suffix } = 0 unless (exists $beddata{ $sample }->{ $anls.'.'.$suffix });
 		$beddata{ $sample }->{ $anls.'.'.$suffix } = $analysis{$anls};
 		#print ">>>>",$sample,"\t",$anls.'.'.$suffix,"\t",$analysis{$anls},"\n";
@@ -172,41 +325,82 @@ foreach my $bedfile (glob("$indir/*.bed")) {
 	}
 }
 
+
 my @fastqh = (sort { $a cmp $b } keys %fastqheader);
 my @bedh = (sort { $a cmp $b } keys %bedheader);
 
-my %finalgene;
+my %finalprot;
 open(IN, "<", $finalfile) or $LOGGER->logdie($!);
 while(<IN>) {
 	chomp;
-	next if ($.==1);
 	my @F = split(/\t/, $_);
-	$finalgene{$F[0]}=0;
-	$finalgene{$F[0]}=1 if ($F[2]=~/hypothetical protein/);
+	$finalprot{$F[0]} = undef;
 }
 close(IN);
 
-my %finalprot;
-open(IN, "<", $protdef) or $LOGGER->logdie($!);
-while(<IN>) {
-	chomp;
-	my @F = split(/\t/, $_);
-	my ($g) = $F[0]=~/^([^\.]+)/;
-	if (exists $finalgene{$g}) {
-		$finalprot{$F[0]}=0;
-		$finalprot{$F[0]}=1 if ($finalgene{$g});
+my %defline;
+{
+	my %check_protein = %finalprot;
+	open(IN, "<", $deflinefile) or $LOGGER->logdie($!);
+	while(<IN>) {
+		chomp;
+		my @F=split(/\t/, $_);
+		if (exists $finalprot{ $F[0] } ) {
+			delete($check_protein{ $F[0] });
+			$finalprot{ $F[0] }=0;
+			$finalprot{ $F[0] }=1 if ($F[1]=~/hypothetical protein/);
+		}
+	}
+	close(IN);
+
+	if (scalar(keys %check_protein)>0) {
+		$LOGGER->logdie("Not found all proteins in defline file ($deflinefile)");
 	}
 }
-close(IN);
 
-print { $outfh{'counts'} } '# Number of genes passing filter: '.scalar(keys %finalgene)."\n";
-print { $outfh{'counts'} } '# Number of genes passing filter ("hypothetical protein"): '.&count(\%finalgene)."\n";
-print { $outfh{'counts'} } '# Number of proteins passing filter: '.scalar(keys %finalprot)."\n";
-print { $outfh{'counts'} } '# Number of proteins passing filter ("hypothetical protein"): '.&count(\%finalprot)."\n";
-print { $outfh{'counts'} } join("\t", '#ID', @fastqh, @bedh),"\n";
-foreach my $sample (sort { $a cmp $b } (keys %fastqdata)) {	
-	print { $outfh{'counts'} } join("\t", $sample, map {$_||0} (@{$fastqdata{$sample}}{@fastqh}, @{$beddata{$sample}}{@bedh})),"\n";
+my %finalgene;
+{
+	my %check_protein = %finalprot;
+
+	open(IN, "<", $anninfofile) or $LOGGER->logdie($!);
+	my $ann_info_header = <IN>;
+	chomp($ann_info_header);
+	my @ann_info = split(/\t/, $ann_info_header);
+	while(<IN>) {
+		chomp;
+		my %ann;
+		@ann{ @ann_info } = split(/\t/, $_);
+
+		if (exists $finalprot{ $ann{'peptideName'}  }) {
+			delete($check_protein{ $ann{'peptideName'} });
+			unless (exists $finalgene{ $ann{'locusName'} }) {
+				$finalgene{ $ann{'locusName'} }=0;
+			}
+			$finalgene{ $ann{'locusName'} }=1 if ($finalprot{ $ann{'peptideName'}  });
+		}
+	}
+	close(IN);
+	
+	if (scalar(keys %check_protein)>0) {
+		$LOGGER->logdie("Not found all proteins in annotation_info file ($anninfofile)");
+	}
 }
+
+print { $outfh{'counts'} } '#','Input read pairs .........................................: ', $info{ 'INPUT_READ_PAIRS' },"\n";
+print { $outfh{'counts'} } '#','Processed read pairs (atropos_final) .....................: ', $info{ 'atropos_final' },"\n";
+print { $outfh{'counts'} } '#','Number of genes passing filter............................: '.scalar(keys %finalgene)."\n";
+print { $outfh{'counts'} } '#','Number of genes passing filter ("hypothetical protein")...: '.&count(\%finalgene)."\n";
+print { $outfh{'counts'} } '#','Number of proteins passing filter.........................: '.scalar(keys %finalprot)."\n";
+print { $outfh{'counts'} } '#','Number of proteins passing filter ("hypothetical protein"): '.&count(\%finalprot)."\n";
+print { $outfh{'counts'} } '#',join("\t", 'ID', @ftype, @analysis_order),"\n";
+foreach my $id (@extra, @biosample_order) {
+	print { $outfh{'counts'} } $id;
+	foreach my $ft (@ftype, @analysis_order) {
+		print { $outfh{'counts'} } "\t",($info{ $id.'.'.$ft }||0);
+	}
+	print { $outfh{'counts'} } "\n";
+}
+
 
 # Subroutines
 
@@ -225,8 +419,9 @@ Argument(s)
 	-h	--help		Help
 	-l	--level		Log level [Default: FATAL]
 	-i	--indir		Input directory
-	-f	--final		Final results file
-	-p	--protdef	Protein definition file
+	-f	--final		Final results peaks file ( _peaks.txt )
+	-a	--anninfo	Protein annotation information (.annotation_info.txt)
+	-d	--defline	Protein definition file (.defline.txt)
 	-o	--outfile	Output file
 
 END_USAGE
