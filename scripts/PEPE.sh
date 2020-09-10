@@ -257,7 +257,7 @@ if 	[ ! -e ${outdir}/${infilebn}.assembled.fastq ] &&
 						-qt ${demux_quality_threshold} \
 						-ml ${minlength} \
 						-md ${demux_maxdiffs:="0"} \
-						-mq ${demux_minqual} \
+						-ms ${demux_minalnscore} \
 						-m5p ${model_adapter_sequence_5prime} \
 						-m3p ${model_adapter_sequence_3prime} \
 						-ooe \
@@ -270,7 +270,7 @@ if 	[ ! -e ${outdir}/${infilebn}.assembled.fastq ] &&
 							-y ${demux_reads_merger_memory} \
 							-mm ${demux_maxmismatches} \
 							-ml ${minlength} \
-							-mq ${demux_minqual} \
+							-ms ${demux_minalnscore} \
 							-mm ${demux_maxmismatches} \
 							-nb ${demux_nbases} \
 							-m5p ${model_adapter_sequence_5prime} \
@@ -449,8 +449,10 @@ for s in $(cut -f 2 ${bcfile}); do
 		
 	done
 	
-	eval "${scriptsdir}/count_Reads.pl -i ${outdir} -s ${s} -x *id.*.bed -o ${outdir}/${s}.counts.txt -l INFO"
-
+	eval "${scriptsdir}/count_Reads.pl -i ${outdir} -s ${s} -x *id.*.bed -o ${outdir}/${s}.gene.counts.txt -l INFO"
+	eval "${scriptsdir}/count_Reads.pl -p -i ${outdir} -s ${s} -x *id.*.bed -o ${outdir}/${s}.protein.counts.txt -l INFO"
+	ln -f -s $(readlink -f ${outdir}/${s}.protein.counts.txt) ${outdir}/${s}.counts.txt
+	
 	counts_file_param=(${counts_file_param[@]} "-d ${s}=\"${outdir}/${s}.counts.txt\"")
 	biogroup=$(grep "${s}" ${bcfile} | cut -f 3)
 	
@@ -467,6 +469,7 @@ for K in "${!GROUP[@]}"; do
 	groups_param=(${groups_param[@]} "-g ${K}=\"$(echo ${GROUP[${K}]} | sed 's/ /,/g')\"")
 done
 
+echo "Joining Results [ReadCountsMatrix.txt] ..."
 
 eval "./join_Results.pl ${counts_file_param[*]} ${groups_param[*]} > ${outdir}/ReadCountsMatrix.txt"
 
@@ -474,7 +477,12 @@ filtered_file="${outdir}/FilteredReadCountsMatrix_${filter_mingroups}_${filter_m
 annotated_filtered_file="${outdir}/AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}.txt"
 annotated_filtered_peaks_file="${outdir}/AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}_peaks.txt"
 
+echo "Filtering Results [FilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}.txt] ..."
+
 eval "./filter_Results.pl ${groups_param[*]} -i ${outdir}/ReadCountsMatrix.txt -o ${outgroup} -u ${filter_mingroups} -s ${filter_minsamples} -m ${filter_min} > ${filtered_file}"
+
+echo "Annotating Results [AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}.txt] ..."
+
 eval "./annot_Results.pl -i ${filtered_file} -g ${genenamefile} -d ${deflinefile} > ${annotated_filtered_file}"
 
 if [ ${fastafile} ]; then
@@ -483,7 +491,11 @@ if [ ${fastafile} ]; then
 	
 	mkdir -p ${outdir}/hydroplot/
 	
+	echo "Finding peaks [AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}_peaks.txt] ..."
+
 	eval "cut -f 1 ${annotated_filtered_file} | grep -v '^ID' | ./findPeaks.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${annotated_filtered_peaks_file} -l INFO"
+
+	echo "Plot Hydrophobic/Hydrophilic indexes ..."
 
 	eval "./plotHydro.pl -p ${fastafile} -i ${annotated_filtered_peaks_file} -o ${outdir}/hydroplot/"
 fi
