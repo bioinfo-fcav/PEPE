@@ -109,9 +109,10 @@ my %symbol;
 open(GENE, "<", $genefile) or $LOGGER->logdie($!);
 while(<GENE>) {
 	chomp;
-	my ($gene, $name) = split(/\t/, $_);
+	my ($protein, $name) = split(/\t/, $_);
+	my $gene=$protein;
 	$gene=~s/\.\d+//;
-	$symbol{ $gene } = $name;
+	$symbol{ $protein } = $name;
 }
 close(GENE);
 
@@ -122,10 +123,11 @@ my %definition;
 open(DEF, "<", $deffile) or $LOGGER->logdie($!);
 while(<DEF>) {
 	chomp;
-	my ($gene, undef, $defline) = split(/\t/, $_);
+	my ($protein, undef, $defline) = split(/\t/, $_);
+	my $gene=$protein;
 	$gene=~s/\.\d+$//;
 	$defline=~s/defLine\s+// if ($defline);
-	$definition{ $gene } = $defline;
+	$definition{ $protein } = $defline;
 }
 close(DEF);
 
