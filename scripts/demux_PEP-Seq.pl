@@ -85,7 +85,7 @@ INIT {
 # In MODEL_ADAPTER_SEQUENCE_5PRIME we need to have 3 consecutive Ns
 use constant DEFAULT_MODEL_ADAPTER_SEQUENCE_5PRIME=>'tcNNNGGAGCTGTCGTATTCCAGTCAGG';
 use constant DEFAULT_MODEL_ADAPTER_SEQUENCE_3PRIME=>'CCTCTAAACGGGTCTTGAGGGGTT';
-use constant DEFAULT_MIN_QUAL_SCORE=>30;
+use constant DEFAULT_MIN_ALN_SCORE=>30;
 use constant DEFAULT_MIN_LENGTH=>60;
 use constant DEFAULT_MAX_MISMATCHES=>1;
 use constant DEFAULT_MERGER=>'pear';
@@ -109,7 +109,7 @@ my (	$level,
 	$barcodesfile, 
 	$maxmismatches, 
 	$minlength,
-	$minqualscore,
+	$minalnscore,
 	$merger, 
 	$dmnd, 
 	$nthreads, 
@@ -141,7 +141,7 @@ GetOptions(	"h|?|help" => sub { &Usage(); },
 		"d|dmnd=s"=>\$dmnd,
 		"mm|maxmismatches=s"=>\$maxmismatches,
 		"ml|minlength=s"=>\$minlength,
-		"mq|minqual=s"=>\$minqualscore,
+		"mq|minqual=s"=>\$minalnscore,
 		"t|threads=i"=>\$nthreads,
 		"y|memory=s"=>\$pear_memory,
 		"ooe|only-one-end"=>\$only_one_end,
@@ -165,7 +165,7 @@ $trim_rev_for_blastx||=DEFAULT_TRIM_REV_FOR_BLASTX;
 $model_adapter_sequence_5prime||=DEFAULT_MODEL_ADAPTER_SEQUENCE_5PRIME;
 $model_adapter_sequence_3prime||=DEFAULT_MODEL_ADAPTER_SEQUENCE_3PRIME;
 $minlength||=DEFAULT_MIN_LENGTH;
-$minqualscore||=DEFAULT_MIN_QUAL_SCORE;
+$minalnscore||=DEFAULT_MIN_ALN_SCORE;
 $maxmismatches||=DEFAULT_MAX_MISMATCHES;
 $merger||=DEFAULT_MERGER;
 $nthreads||=DEFAULT_THREADS_NUMBER;
@@ -393,7 +393,7 @@ sub Usage {
     my ($msg) = @_;
 
 	$minlength=DEFAULT_MIN_LENGTH;
-	$minqualscore=DEFAULT_MIN_QUAL_SCORE;
+	$minalnscore=DEFAULT_MIN_ALN_SCORE;
 	$maxmismatches=DEFAULT_MAX_MISMATCHES;
 	$merger=DEFAULT_MERGER;
 	$nthreads=DEFAULT_THREADS_NUMBER;
@@ -427,13 +427,14 @@ Argument(s)
 	-md	--mergemaxdiffs		Merger (usearch/vsearch) max differences in overlap [Default: $mergemaxdiffs]
 	-l	--level			Log level [Default: FATAL]
 	-ooe	--only-one-end		Choose only the read 1 (R1) of the paired-ends for unassembled fragments
+	-nb	--nbases		Concatenate unassembled R1 and R2 splitted by a number of N bases
 	-d	--dmnd			DIAMOND index
 	-r1	--r1file		Read 1 (forward) file
 	-r2	--r2file		Read 2 (reverse) file
 	-o	--outdir		Output directory
 	-b	--barcodes		Barcodes file
 	-mm	--maxmismatches		Maximum number of mismatches [Default: $maxmismatches]
-	-mq	--minqual		Minimum Phred quality score [Default: $minqualscore]
+	-ms	--minalnscore		Minimum SeqAn alignment score [Default: $minalnscore]
 	-ml	--minlength		Minimum read size [Default: $minlength]
 	-n	--noalign		No DIAMOND alignment
 	-did	--diamond-id		DIAMOND --id [Default: $diamond_id]
@@ -478,7 +479,7 @@ sub printToFile {
 			}
 			$aln1=~s/-//g;
 			
-			if ($score >= $minqualscore) {
+			if ($score >= $minalnscore) {
 				my %mismatch;
 				my $selseq = '';
 
@@ -655,7 +656,7 @@ sub printToFile {
 #			}
 #			$aln1=~s/-//g;
 #			
-#			if ($score >= DEFAULT_MIN_QUAL_SCORE) {
+#			if ($score >= DEFAULT_MIN_ALN_SCORE) {
 #				my %mismatch;
 #				my $selseq = '';
 #				if ($aln2=~/^TC-NNN/) {
