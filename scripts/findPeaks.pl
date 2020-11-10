@@ -152,7 +152,7 @@ my $seqin = Bio::SeqIO->new(-file=>$protfile, -format=>'FASTA');
 while(my $seq = $seqin->next_seq()) {
 	my $seqid=$seq->display_id();
 	my $seqidwv=$seqid;
-	$seqidwv=~s/\.\d+$//;
+	#$seqidwv=~s/\.\d+$//;
 	if ( (scalar(keys %selprot) == 0) || (exists $selprot{ $seqid }) || ( exists $selprot{ $seqidwv } ) ) {
 		
 		my $sseq=$seq->seq();

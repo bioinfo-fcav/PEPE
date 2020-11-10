@@ -49,6 +49,25 @@ get the index (Athaliana_447_Araport11.dmnd). Then, you need to fillout the conf
  ./PEPE.sh PEPE.cfg
 ```
 
+### Gene Ontology enrichment Analysis
+
+This analysis depends on PEPE results (for example, FilteredReadCountsMatrix_2_3_1.txt), the goatools [https://github.com/tanghaibao/goatools] software and the reference annotation info file from Phytozome:
+
+```
+mkdir ../outdir/goatools_phytozome
+
+./mkGOATOOLS.sh phytozome ../refs/Athaliana_447_Araport11.annotation_info.txt ../outdir/FilteredReadCountsMatrix_2_3_1.txt ../outdir/goatools_phytozome
+```
+
+... or GO association file (item2term_1) from agriGO [http://bioinfo.cau.edu.cn/agriGO/download/item2term_1]:
+
+```
+mkdir ../outdir/goatools_agrigo
+
+./mkGOATOOLS.sh agrigo ./item2term_1 ../outdir/FilteredReadCountsMatrix_2_3_1.txt ../outdir/goatools_agrigo
+
+```
+
 ### Flowchart diagram:
 
 ![Flowchart diagram](https://raw.githubusercontent.com/bioinfo-fcav/PEPE/master/DiagramPEP-Seq-v5.png)

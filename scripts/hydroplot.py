@@ -54,7 +54,7 @@ def smooth_values(values, weights):
 
 def main(window, scale, infile, outfile, coord, dpi):
     # hydrophobicity indexes
-    scaledesc = {'kd': 'Kyte&Doolittle', 'hw': 'Hopp&Woods'}
+    scaledesc = {'kd': 'Kyte&Doolittle hydrophobicity', 'hw': 'Hopp&Woods hydrophilicity'}
     scaledata = {}
     scaledata['kd'] = 	{ 'A': 1.8,'R':-4.5,'N':-3.5,'D':-3.5,'C': 2.5,
 		          'Q':-3.5,'E':-3.5,'G':-0.4,'H':-3.2,'I': 4.5,
@@ -65,7 +65,7 @@ def main(window, scale, infile, outfile, coord, dpi):
 		          'L':-1.8,'K': 3.0,'M':-1.3,'F':-2.5,'P': 0.0,
 		          'S': 0.3,'T':-0.4,'W':-3.4,'Y':-2.3,'V':-1.5 }
 
-   
+#https://www.meme.net.au/savitzky-golay.html  
 #aa	aa	Kyte-Doolittle	Hopp-Woods	Cornette	Eisenberg	Rose	Janin	Engelman GES
 #A	Alanine		1.80	-0.50	0.20	0.62	0.74	0.30	1.60
 #C	Cysteine	2.50	-1.00	4.10	0.29	0.91	0.90	2.00
@@ -141,10 +141,10 @@ def main(window, scale, infile, outfile, coord, dpi):
     axis(xmin = 1, xmax = len(record.sequence))
     
     xlabel("residue number")
-    ylabel(scaledesc[scale]+" hydrophobicity")
+    ylabel(scaledesc[scale])
     
     record_id = record.title.split(" ", 1)[0]
-    title("Three hydrophobicity smoothings of " + record_id)
+    title("Protein " + record_id)
     
     if outfile:
     	savefig(outfile, dpi=dpi)
