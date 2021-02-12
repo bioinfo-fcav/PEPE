@@ -285,7 +285,7 @@ if 	[ ! -e ${outdir}/${infilebn}.assembled.fastq ] &&
 							-d ${dmndfile} \
 							-mm ${demux_maxmismatches} \
 							-ml ${minlength} \
-							-mq ${demux_minqual} \
+							-ms ${demux_minalnscore} \
 							-mm ${demux_maxmismatches} \
 							-m5p ${model_adapter_sequence_5prime} \
 							-m3p ${model_adapter_sequence_3prime} \
