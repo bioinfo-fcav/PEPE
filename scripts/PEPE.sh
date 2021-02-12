@@ -489,16 +489,24 @@ if [ ${fastafile} ]; then
 
 	samps=`echo ${!GROUP[@]} | sed "s/${outgroup}//" | sed 's/^ \+//' | sed 's/ \+$//' | sed 's/ \+/,/g'`
 	
-	mkdir -p ${outdir}/hydroplot/
 	
-	echo "Finding peaks [AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}_peaks.txt] ..."
+	echo "Creating coverage plots ..."
+	
+	mkdir -p ${outdir}/covplot
+	
+	echo "cut -f 1 ${annotated_filtered_file} | grep -v '^ID' | ./plotCoverage.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${outdir}/covplot"
 
+	echo "Finding peaks [AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}_peaks.txt] ..."
+	
 	eval "cut -f 1 ${annotated_filtered_file} | grep -v '^ID' | ./findPeaks.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${annotated_filtered_peaks_file} -l INFO"
 
 	echo "Plot Hydrophobic/Hydrophilic indexes ..."
 
+	mkdir -p ${outdir}/hydroplot/
+	
 	eval "./plotHydro.pl -p ${fastafile} -i ${annotated_filtered_peaks_file} -o ${outdir}/hydroplot/"
 fi
+
 
 ./mkPEPEstats.pl -i ${outdir} 	-f ${annotated_filtered_peaks_file} \
 				-o ${outdir}/STATISTICS.txt \
