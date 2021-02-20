@@ -494,7 +494,7 @@ if [ ${fastafile} ]; then
 	
 	mkdir -p ${outdir}/covplot
 	
-	echo "cut -f 1 ${annotated_filtered_file} | grep -v '^ID' | ./plotCoverage.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${outdir}/covplot"
+	cut -f 1 ${annotated_filtered_file} | grep -v '^ID' | ./plotCoverage.pl -i ${outdir}/ -g ${samps} -x *id.*.bed -p ${fastafile} -o ${outdir}/covplot
 
 	echo "Finding peaks [AnnotFilteredReadCountsMatrix_${filter_mingroups}_${filter_minsamples}_${filter_min}_peaks.txt] ..."
 	
