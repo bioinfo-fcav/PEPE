@@ -73,5 +73,5 @@ mkdir ../outdir/goatools_agrigo
 
 ### Flowchart diagram:
 
-![Flowchart diagram](https://raw.githubusercontent.com/bioinfo-fcav/PEPE/master/DiagramPEP-Seq-v5.png)
+![Flowchart diagram](https://raw.githubusercontent.com/bioinfo-fcav/PEPE/master/DiagramPEP-Seq-v6.png)
 
